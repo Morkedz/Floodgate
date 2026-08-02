@@ -16,16 +16,16 @@ const char* MQTT_BROKER = "broker.hivemq.com";
 const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = TOPIC;
 
-// Sleep configuration: 60 seconds interval (adjust as needed)
+// Sleep configuration: 15 seconds interval
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro-seconds to seconds */
 #define TIME_TO_SLEEP  15          /* Time ESP32 will stay in deep sleep (seconds) */
 
 // ==========================================
 // 2. HARDWARE PIN DEFINITIONS
 // ==========================================
-#define MOSFET_BOOST_ENABLE_PIN 18  // Controls IRLZ44N MOSFET to toggle MT3608 12V boost
 #define I2C_SDA_PIN 21              // SDA for BMP280 & ADS1115 ADC
 #define I2C_SCL_PIN 22              // SCL for BMP280 & ADS1115 ADC
+#define LED_BUILTIN_PIN 2           // Status LED pin
 
 // ==========================================
 // 3. OBJECT INITIALIZATION & GLOBAL STATE
@@ -71,18 +71,18 @@ void reconnectMQTT() {
 
     if (mqttClient.connect(clientId.c_str())) {
       Serial.println(" Connected!");
-      digitalWrite(2,LOW);
+      digitalWrite(LED_BUILTIN_PIN, LOW);
       delay(1000);
-      digitalWrite(2,HIGH);
+      digitalWrite(LED_BUILTIN_PIN, HIGH);
       delay(1000);
-      digitalWrite(2,LOW);
+      digitalWrite(LED_BUILTIN_PIN, LOW);
       delay(1000);
-      digitalWrite(2,HIGH);
+      digitalWrite(LED_BUILTIN_PIN, HIGH);
     } else {
       Serial.print(" Failed, rc=");
-      digitalWrite(2,LOW);
+      digitalWrite(LED_BUILTIN_PIN, LOW);
       delay(1000);
-      digitalWrite(2,HIGH);
+      digitalWrite(LED_BUILTIN_PIN, HIGH);
       Serial.println(mqttClient.state());
     }
   }
@@ -92,22 +92,19 @@ void reconnectMQTT() {
 // 5. SENSOR INITIALIZATION & SAMPLING
 // ==========================================
 void setupSensors() {
-  pinMode(MOSFET_BOOST_ENABLE_PIN, OUTPUT);
-  digitalWrite(MOSFET_BOOST_ENABLE_PIN, LOW);  // Keep 12V off initially
-
-  pinMode(2,OUTPUT);
+  pinMode(LED_BUILTIN_PIN, OUTPUT);
 
   // Initialize I2C bus explicitly
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   delay(100); // Give I2C lines time to settle on wake
 
-  // Retry loop for BMP280 (helps catch it if it was booting slow)
+  // Retry loop for BMP280
   for (int i = 0; i < 3; i++) {
     if (bmp.begin(0x76) || bmp.begin(0x77)) {
       bmpAvailable = true;
       Serial.println("BMP found");
       break;
-    }else{
+    } else {
       Serial.println("BMP not found");
     }
     delay(100);
@@ -118,10 +115,10 @@ void setupSensors() {
   for (int i = 0; i < 3; i++) {
     if (ads.begin(0x48)) {
       adsAvailable = true;
-      Serial.println("Ads found");
+      Serial.println("ADS found");
       break;
-    }else{
-      Serial.println("Ads not found");
+    } else {
+      Serial.println("ADS not found");
     }
     delay(100);
   }
@@ -131,34 +128,31 @@ void readAndPublishSensors() {
   float atmPressureHPa = 1013.25;
   float ambientTempC = 20.0;
   float transducerVolts = 0.0;
-  float depth;
+  float depth = 0.0f;
 
   // --- Step A: Read BMP280 Atmospheric Data ---
   if (bmpAvailable) {
     ambientTempC = bmp.readTemperature();
-    atmPressureHPa = bmp.readPressure();
+    atmPressureHPa = bmp.readPressure() / 100.0F; // Converted Pa to hPa
   }
 
-  // --- Step B: Read 12V Submersible Pressure Transducer ---
-  digitalWrite(MOSFET_BOOST_ENABLE_PIN, HIGH);
-  delay(50);  // Allow 50ms for 12V boost stabilization
-
+  // --- Step B: Read Submersible Pressure Transducer via ADS1115 ---
   if (adsAvailable) {
     int16_t adcRaw = ads.readADC_SingleEnded(0);
     transducerVolts = ads.computeVolts(adcRaw);
     depth = (transducerVolts <= 0.4f) ? 0.0f : (transducerVolts - 0.472f) * 3.125f;
   } else {
-    transducerVolts = 0.50 + ((random(-50, 50)) / 1000.0);
+    // Fallback simulation value if ADC is disconnected
+    transducerVolts = 0.50f + ((random(-50, 50)) / 1000.0f);
+    depth = (transducerVolts - 0.472f) * 3.125f;
   }
-
-  digitalWrite(MOSFET_BOOST_ENABLE_PIN, LOW);  // Shut off 12V boost immediately
 
   // --- Step C: Build JSON Telemetry Payload ---
   StaticJsonDocument<256> doc;
   doc["device_id"] = "ESP32-FloodGate";
-  doc["water_depth"] = round(depth * 1000.0) / 1000.0;
-  doc["atm_pressure_hpa"] = round(atmPressureHPa * 10.0) / 10.0;
-  doc["ambient_temp_c"] = round(ambientTempC * 10.0) / 10.0;
+  doc["water_depth"] = round(depth * 1000.0f) / 1000.0f;
+  doc["atm_pressure_hpa"] = round(atmPressureHPa * 10.0f) / 10.0f;
+  doc["ambient_temp_c"] = round(ambientTempC * 10.0f) / 10.0f;
   doc["status"] = "OK";
 
   char jsonBuffer[256];
@@ -201,5 +195,5 @@ void setup() {
 }
 
 void loop() {
-  
+  // Empty - Code executes once in setup() then enters deep sleep
 }
