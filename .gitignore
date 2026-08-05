@@ -1,2 +1,14 @@
 secrets.h
 .DS_Store
+venv/
+.venv/
+env/
+ENV/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+*.log
