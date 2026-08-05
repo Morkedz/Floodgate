@@ -151,12 +151,16 @@ void readAndPublishSensors() {
 
     int16_t adcAvg = adcSum / SAMPLES;
     transducerVolts = ads.computeVolts(adcAvg);
+    Serial.print("[ADC] Measured Volts: ");
+    Serial.println(transducerVolts, 4);
+
+    const float zero_depth_volt = .846f;
 
     // Filter out readings below sensor offset threshold (0.472V)
-    if (transducerVolts <= 0.472f) {
+    if (transducerVolts <= zero_depth_volt) {
       depth = 0.0f;
     } else {
-      depth = (transducerVolts - 0.472f) * 3.125f;
+      depth = (transducerVolts - zero_depth_volt) * 3.125f;
     }
   } else {
     Serial.println("[WARNING] ADS1115 unavailable! Check I2C connections on perfboard.");
