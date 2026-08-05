@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FloodGate Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="logo-title">
+      <h1>Flood<span>Gate</span></h1>
+      <p>Smart Storm Drain Monitoring System</p>
+    </div>
+  </header>
+
+  <main class="dashboard-grid">
+    <div class="card stat-card green-accent">
+      <h3>SYSTEM STATUS</h3>
+      <div class="stat-value" id="system-status">ONLINE</div>
+      <p class="stat-sub" id="last-updated">Last Updated: Just now</p>
+    </div>
+
+    <div class="card stat-card yellow-accent">
+      <h3>FLOOD LIKELIHOOD</h3>
+      <div class="stat-value" id="flood-likelihood">0%</div>
+    </div>
+
+    <div class="card stat-card yellow-accent">
+      <h3>CLOG LIKELIHOOD</h3>
+      <div class="stat-value" id="clog-likelihood">0%</div>
+    </div>
+
+    <div class="card chart-card">
+      <h3>ATMOSPHERIC PRESSURE (hPa)</h3>
+      <canvas id="pressureChart"></canvas>
+    </div>
+
+    <div class="card chart-card">
+      <h3>TEMPERATURE (°C)</h3>
+      <canvas id="tempChart"></canvas>
+    </div>
+
+    <div class="card chart-card">
+      <h3>WATER LEVEL (m)</h3>
+      <canvas id="waterChart"></canvas>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
