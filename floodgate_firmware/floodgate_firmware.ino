@@ -18,8 +18,8 @@ const char* MQTT_TOPIC = TOPIC;
 
 // Sleep configuration constants
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for microseconds to seconds */
-#define DEFAULT_SLEEP_TIME 900     /* Default: 15 minutes (900 seconds) */
-#define HIGH_RISK_SLEEP_TIME 120   /* High Risk: 2 minutes (120 seconds) */
+#define DEFAULT_SLEEP_TIME 15    
+#define HIGH_RISK_SLEEP_TIME 30 
 
 // Dynamic sleep time stored in RTC memory to survive deep sleep cycles
 RTC_DATA_ATTR int sleepDuration = DEFAULT_SLEEP_TIME;
