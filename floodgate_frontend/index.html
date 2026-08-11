@@ -3,53 +3,179 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FloodGate Dashboard</title>
-  <link rel="stylesheet" href="style.css">
-  
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <title>FloodGate - Smart Storm Drain Monitoring System</title>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #cce4fc;
+      --card-bg: #eff3ff;
+      --border-color: #b1b7bd;
+      --text-main: #000000;
+      --text-muted: #333335;
+      --accent-blue: #3182ce;
+      --accent-green: #38a169;
+      --accent-teal: #38b2ac;
+      --accent-yellow: #ecc94b;
+      --accent-red: #e53e3e;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 2rem;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 2rem;
+    }
+    .header-mark {
+      width: 4px;
+      align-self: stretch;
+      background: var(--accent-blue);
+      border-radius: 2px;
+    }
+    .header-title h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: var(--accent-blue);
+      letter-spacing: -0.01em;
+    }
+    .header-title p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .grid-top {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .grid-bottom {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .card-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .card-subtext {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+
+    /* Status indicator dot - color is set from app.js */
+    .status-dot {
+      font-size: 0.9rem;
+      line-height: 1;
+      color: var(--text-muted);
+      transition: color 0.3s ease;
+    }
+
+    /* Chart Container Styling */
+    .chart-container {
+      position: relative;
+      height: 180px;
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+  </style>
 </head>
 <body>
 
-  <header class="header">
-    <div class="logo-title">
-      <h1>Flood<span>Gate</span></h1>
+  <div class="header">
+    <div class="header-mark"></div>
+    <div class="header-title">
+      <h1>FloodGate</h1>
       <p>Smart Storm Drain Monitoring System</p>
     </div>
-  </header>
+  </div>
 
-  <main class="dashboard-grid">
-    <div class="card stat-card green-accent">
-      <h3>SYSTEM STATUS</h3>
-      <div class="stat-value" id="system-status">ONLINE</div>
-      <p class="stat-sub" id="last-updated">Last Updated: Just now</p>
+  <div class="grid-top">
+    <div class="card">
+      <div class="card-title">
+        <span id="status-label">Connecting</span>
+        <span id="status-dot" class="status-dot">&#9679;</span>
+      </div>
+      <div id="last-updated" class="card-subtext">Waiting for first reading</div>
     </div>
 
-    <div class="card stat-card yellow-accent">
-      <h3>FLOOD LIKELIHOOD</h3>
-      <div class="stat-value" id="flood-likelihood">0%</div>
+    <div class="card">
+      <div class="card-title">Flood likelihood</div>
+      <div id="flood-likelihood" class="card-value">&mdash;</div>
     </div>
 
-    <div class="card stat-card yellow-accent">
-      <h3>CLOG LIKELIHOOD</h3>
-      <div class="stat-value" id="clog-likelihood">0%</div>
+    <div class="card">
+      <div class="card-title">Clog likelihood</div>
+      <div id="clog-likelihood" class="card-value">&mdash;</div>
+    </div>
+  </div>
+
+  <div class="grid-bottom">
+
+    <div class="card">
+      <div class="card-title">Atmospheric pressure</div>
+      <div class="chart-container">
+        <canvas id="pressureChart"></canvas>
+      </div>
     </div>
 
-    <div class="card chart-card">
-      <h3>ATMOSPHERIC PRESSURE (hPa)</h3>
-      <canvas id="pressureChart"></canvas>
+    <div class="card">
+      <div class="card-title">Temperature</div>
+      <div class="chart-container">
+        <canvas id="tempChart"></canvas>
+      </div>
     </div>
 
-    <div class="card chart-card">
-      <h3>TEMPERATURE (°C)</h3>
-      <canvas id="tempChart"></canvas>
+    <div class="card">
+      <div class="card-title">Water level</div>
+      <div class="chart-container">
+        <canvas id="waterChart"></canvas>
+      </div>
     </div>
 
-    <div class="card chart-card">
-      <h3>WATER LEVEL (m)</h3>
-      <canvas id="waterChart"></canvas>
-    </div>
-  </main>
+  </div>
 
   <script src="app.js"></script>
 </body>
