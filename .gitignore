@@ -12,3 +12,4 @@ build/
 .next/
 .nuxt/
 *.log
+floodgate_backend/.env
