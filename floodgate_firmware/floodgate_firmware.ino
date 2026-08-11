@@ -16,9 +16,13 @@ const char* MQTT_BROKER = "broker.hivemq.com";
 const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = TOPIC;
 
-// Sleep configuration: 15 seconds interval
-#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro-seconds to seconds */
-#define TIME_TO_SLEEP  10          /* Time ESP32 will stay in deep sleep (seconds) */
+// Sleep configuration constants
+#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for microseconds to seconds */
+#define DEFAULT_SLEEP_TIME 900     /* Default: 15 minutes (900 seconds) */
+#define HIGH_RISK_SLEEP_TIME 120   /* High Risk: 2 minutes (120 seconds) */
+
+// Dynamic sleep time stored in RTC memory to survive deep sleep cycles
+RTC_DATA_ATTR int sleepDuration = DEFAULT_SLEEP_TIME;
 
 // ==========================================
 // 2. HARDWARE PIN DEFINITIONS
@@ -40,7 +44,35 @@ bool bmpAvailable = false;
 bool adsAvailable = false;
 
 // ==========================================
-// 4. NETWORK & MQTT HELPERS
+// 4. MQTT CALLBACK FOR RISK UPDATES
+// ==========================================
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  StaticJsonDocument<512> doc;
+  DeserializationError error = deserializeJson(doc, payload, length);
+
+  if (error) {
+    Serial.print("[MQTT Callback] JSON Parsing Failed: ");
+    Serial.println(error.f_str());
+    return;
+  }
+
+  // Check if message came from the Python OpenWeather Bridge
+  if (doc.containsKey("source") && strcmp(doc["source"], "openweather_api") == 0) {
+    int highRisk = doc["high risk"] | 0;
+
+    if (highRisk == 1) {
+      sleepDuration = HIGH_RISK_SLEEP_TIME; // 2 minutes
+      Serial.println("\n[RISK ALERT] High Risk Weather Forecast Detected!");
+      Serial.printf("[RISK ALERT] Updated Sleep Duration to %d seconds (2 mins).\n", sleepDuration);
+    } else {
+      sleepDuration = DEFAULT_SLEEP_TIME;   // 15 minutes
+      Serial.println("\n[RISK ALERT] Low/Normal Risk Weather. Setting Sleep Duration to 15 mins.");
+    }
+  }
+}
+
+// ==========================================
+// 5. NETWORK & MQTT HELPERS
 // ==========================================
 void setupWiFi() {
   Serial.print("Connecting to WiFi: ");
@@ -71,25 +103,28 @@ void reconnectMQTT() {
 
     if (mqttClient.connect(clientId.c_str())) {
       Serial.println(" Connected!");
+      
+      // Subscribe to the shared channel to receive OpenWeather risk broadcasts
+      mqttClient.subscribe(MQTT_TOPIC);
+      Serial.print("[MQTT] Subscribed to topic: ");
+      Serial.println(MQTT_TOPIC);
+
       digitalWrite(LED_BUILTIN_PIN, LOW);
-      delay(1000);
+      delay(200);
       digitalWrite(LED_BUILTIN_PIN, HIGH);
-      delay(1000);
+      delay(200);
       digitalWrite(LED_BUILTIN_PIN, LOW);
-      delay(1000);
+      delay(200);
       digitalWrite(LED_BUILTIN_PIN, HIGH);
     } else {
       Serial.print(" Failed, rc=");
-      digitalWrite(LED_BUILTIN_PIN, LOW);
-      delay(1000);
-      digitalWrite(LED_BUILTIN_PIN, HIGH);
       Serial.println(mqttClient.state());
     }
   }
 }
 
 // ==========================================
-// 5. SENSOR INITIALIZATION & SAMPLING
+// 6. SENSOR INITIALIZATION & SAMPLING
 // ==========================================
 void setupSensors() {
   pinMode(LED_BUILTIN_PIN, OUTPUT);
@@ -138,15 +173,14 @@ void readAndPublishSensors() {
 
   // --- Step B: Read ADS1115 with 10-Sample Averaging ---
   if (adsAvailable) {
-    // Short delay to let power rail settle after Wi-Fi connection
-    delay(50); 
+    delay(50); // Let power rail settle
 
     int32_t adcSum = 0;
     const int SAMPLES = 10;
 
     for (int i = 0; i < SAMPLES; i++) {
       adcSum += ads.readADC_SingleEnded(0);
-      delay(10); // 10ms between samples filters out high-frequency RF noise
+      delay(10); // 10ms between samples filters out RF noise
     }
 
     int16_t adcAvg = adcSum / SAMPLES;
@@ -154,11 +188,10 @@ void readAndPublishSensors() {
     Serial.print("[ADC] Measured Volts: ");
     Serial.println(transducerVolts, 4);
 
-    const float zero_depth_volt = .48f;
-
+    const float zero_depth_volt = .4794f;
     depth = (transducerVolts - zero_depth_volt) * 2.75f;
   } else {
-    Serial.println("[WARNING] ADS1115 unavailable! Check I2C connections on perfboard.");
+    Serial.println("[WARNING] ADS1115 unavailable! Check I2C connections.");
     transducerVolts = 0.472f;
     depth = 0.0f;
   }
@@ -174,7 +207,6 @@ void readAndPublishSensors() {
   char jsonBuffer[256];
   serializeJson(doc, jsonBuffer);
 
-  reconnectMQTT();
   if (mqttClient.connected()) {
     mqttClient.publish(MQTT_TOPIC, jsonBuffer);
     mqttClient.loop();
@@ -184,7 +216,7 @@ void readAndPublishSensors() {
 }
 
 // ==========================================
-// 6. MAIN SETUP & SLEEP LOOP
+// 7. MAIN SETUP & SLEEP LOOP
 // ==========================================
 void setup() {
   Serial.begin(115200);
@@ -195,17 +227,28 @@ void setup() {
   setupWiFi();
   
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
+  mqttClient.setCallback(mqttCallback);
 
-  // 1. Take sensor readings and publish them right away
+  reconnectMQTT();
+
+  // Listen for 1.5 seconds to catch any weather risk payload broadcast
+  if (mqttClient.connected()) {
+    Serial.println("[MQTT] Listening briefly for weather risk updates...");
+    unsigned long startListen = millis();
+    while (millis() - startListen < 1500) {
+      mqttClient.loop();
+      delay(10);
+    }
+  }
+
+  // 1. Take sensor readings and publish telemetry
   readAndPublishSensors();
 
-  // 2. Prepare and enter Deep Sleep immediately after publishing
-  Serial.print("[Sleep] Going into deep sleep for ");
-  Serial.print(TIME_TO_SLEEP);
-  Serial.println(" seconds...\n");
+  // 2. Enter Deep Sleep with dynamic duration
+  Serial.printf("[Sleep] Entering deep sleep for %d seconds...\n\n", sleepDuration);
   Serial.flush();
 
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_sleep_enable_timer_wakeup(sleepDuration * uS_TO_S_FACTOR);
   esp_deep_sleep_start();
 }
 
