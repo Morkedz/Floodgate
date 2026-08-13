@@ -34,71 +34,51 @@ function renderStage(elementId, percent) {
   }
 }
 
-/**
- * Upgraded Multi-Variable Risk Engine
- * Computes continuous likelihood indices using rolling averages and rate of change.
- */
-function evaluateRiskLogic(readings, highRiskWeather = 0) {
-  if (!readings || readings.length === 0) return { flood: null, clog: null };
+function evaluateRiskLogic(readings) {
+  if (!readings || readings.length < 2) {
+    return { flood: 0, clog: 0 };
+  }
 
+  // 1. Current Reading
   const latest = readings[0];
-  const currentDepth = Math.max(0, latest.water_depth || 0.0);
-  const currentPressure = latest.atm_pressure_hpa || 1013.25;
+  const currentDepth = Math.max(0, parseFloat(latest.water_depth || 0.0));
+  const currentPressure = parseFloat(latest.baro_pressure || 1013.25);
 
-  // 1. STATISTICAL CALCULATIONS ACROSS SAMPLES
-  const sampleCount = readings.length;
-  
-  // Calculate Average Water Depth over available window
-  const avgDepth = readings.reduce((sum, r) => sum + Math.max(0, r.water_depth || 0), 0) / sampleCount;
+  // 2. Limit window to last 5 samples for responsive live reaction
+  const sampleCount = Math.min(readings.length, 5); 
+  const oldestInWindow = readings[sampleCount - 1];
+  const oldestDepth = Math.max(0, parseFloat(oldestInWindow.water_depth || 0.0));
+  const oldestPressure = parseFloat(oldestInWindow.baro_pressure || 1013.25);
 
-  // Rate of Change for Water Depth (m / sample step)
-  const oldestDepth = Math.max(0, readings[sampleCount - 1].water_depth || 0.0);
-  const waterRateOfRise = (currentDepth - oldestDepth) / sampleCount;
+  // Rate of rise over recent samples
+  const depthRateOfRise = (currentDepth - oldestDepth) / sampleCount; 
+  const pressureDrop = oldestPressure - currentPressure; 
 
-  // Barometric Pressure Delta (hPa drop)
-  const oldestPressure = readings[sampleCount - 1].atm_pressure_hpa || currentPressure;
-  const pressureDrop = oldestPressure - currentPressure; // Positive = Falling pressure
+  // --- FLOOD RISK ---
+  // Baseline static score (scaled so 0.4m gives a strong reading for your demo container)
+  let floodScore = (currentDepth / 0.4) * 50; 
 
-  // 2. CONTINUOUS FLOOD RISK INDEX (0 - 100)
-  // Base Risk from Current Depth (Scales steeply above 0.3m)
-  let floodBase = Math.min(100, (currentDepth / 0.80) * 70); 
-
-  // Momentum Multiplier (Rapid rising water increases flood score)
-  let riseBonus = waterRateOfRise > 0 ? Math.min(20, waterRateOfRise * 200) : 0;
-
-  // Meteorological Multiplier (Atmospheric pressure drop or weather alert)
-  let weatherBonus = 0;
-  if (highRiskWeather === 1) {
-    weatherBonus = 20;
-  } else if (pressureDrop > 0.5) {
-    weatherBonus = Math.min(20, pressureDrop * 10);
+  // Dynamic surge bonus (triggers during rapid filling)
+  if (depthRateOfRise > 0.01) {
+    floodScore += depthRateOfRise * 2000; 
   }
 
-  let calculatedFlood = Math.min(99, Math.max(5, floodBase + riseBonus + weatherBonus));
-
-  // 3. CONTINUOUS CLOG RISK INDEX (0 - 100)
-  // Clog condition: High/Elevated water WITHOUT active storm pressure drops
-  let clogBase = 0;
-  
+  // --- CLOG RISK ---
+  let clogScore = 0;
   if (currentDepth > 0.15) {
-    // If water level remains elevated on average over the window
-    clogBase = Math.min(80, (avgDepth / 0.60) * 80);
+    clogScore += (currentDepth / 0.4) * 50;
+
+    // Penalty if water is high BUT not rising/falling anymore (standing water)
+    if (Math.abs(depthRateOfRise) < 0.005) {
+      clogScore += 35; 
+    }
   }
 
-  // Deduct clog likelihood if a storm is clearly driving the water level
-  let stormDeduction = 0;
-  if (highRiskWeather === 1 || pressureDrop > 1.0) {
-    stormDeduction = 40; // Rain is causing the surge, not a blockage
-  }
-
-  let calculatedClog = Math.min(99, Math.max(5, clogBase - stormDeduction));
-
-  return { 
-    flood: Math.round(calculatedFlood), 
-    clog: Math.round(calculatedClog) 
+  return {
+    flood: Math.min(100, Math.max(0, Math.round(floodScore))),
+    clog: Math.min(100, Math.max(0, Math.round(clogScore)))
   };
 }
-
 // CONNECTION STATUS
 let lastReadingAt = null;
 
