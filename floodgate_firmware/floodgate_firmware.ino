@@ -17,8 +17,8 @@ const char* MQTT_TOPIC = TOPIC;
 
 // Sleep configuration constants
 #define uS_TO_S_FACTOR 1000000ULL  //conversion factor
-#define DEFAULT_SLEEP_TIME 15    
-#define HIGH_RISK_SLEEP_TIME 30 
+#define DEFAULT_SLEEP_TIME 300    
+#define HIGH_RISK_SLEEP_TIME 60 
 
 // Dynamic sleep time stored in RTC memory to survive deep sleep cycles
 RTC_DATA_ATTR int sleepDuration = DEFAULT_SLEEP_TIME;
@@ -57,12 +57,12 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     int highRisk = doc["high risk"] | 0;
 
     if (highRisk == 1) {
-      sleepDuration = HIGH_RISK_SLEEP_TIME; // 1 minutes
+      sleepDuration = HIGH_RISK_SLEEP_TIME; // 1 minute
       Serial.println("\n[RISK ALERT] High Risk Weather Forecast Detected!");
-      Serial.printf("[RISK ALERT] Updated Sleep Duration to %d seconds (2 mins).\n", sleepDuration);
+      Serial.printf("[RISK ALERT] Updated Sleep Duration to %d seconds (1 min).\n", sleepDuration);
     } else {
       sleepDuration = DEFAULT_SLEEP_TIME;   // 5 minutes
-      Serial.println("\n[RISK ALERT] Low/Normal Risk Weather. Setting Sleep Duration to 15 mins.");
+      Serial.println("\n[RISK ALERT] Low/Normal Risk Weather. Setting Sleep Duration to 5 mins.");
     }
   }
 }
