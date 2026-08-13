@@ -1,15 +1,9 @@
-// -------------------------------------------------------------------
-// SUPABASE CONFIGURATION
-// -------------------------------------------------------------------
 const SUPABASE_URL = 'https://xthgzjgwabyhlsubuokl.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0aGd6amd3YWJ5aGxzdWJ1b2tsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0NDY3MDQsImV4cCI6MjEwMTAyMjcwNH0.Jfu3zK7IY0HC5Kkx6ofJN8RzAijdzSpsvjyYXgNyMpE';
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// -------------------------------------------------------------------
-// TUNABLES
-// -------------------------------------------------------------------
-const STALE_AFTER_MINUTES = 15;
+const STALE_AFTER_MINUTES = 15; //minutes until ruled device offline
 const ANALYTICS_SCALE = 'percent';
 
 const LIKELIHOOD_STAGES = [
@@ -19,9 +13,6 @@ const LIKELIHOOD_STAGES = [
   { upTo: Infinity, label: 'Very likely',       color: 'var(--accent-red)'    }
 ];
 
-// -------------------------------------------------------------------
-// HELPERS
-// -------------------------------------------------------------------
 // Configured specifically for Hours and Minutes (e.g., "10:42 AM")
 const TIME_FORMAT = { hour: '2-digit', minute: '2-digit' };
 
@@ -54,9 +45,7 @@ function evaluateRiskLogic(readings, highRiskWeather = 0) {
   const currentDepth = Math.max(0, latest.water_depth || 0.0);
   const currentPressure = latest.atm_pressure_hpa || 1013.25;
 
-  // -----------------------------------------------------------------
   // 1. STATISTICAL CALCULATIONS ACROSS SAMPLES
-  // -----------------------------------------------------------------
   const sampleCount = readings.length;
   
   // Calculate Average Water Depth over available window
@@ -70,9 +59,7 @@ function evaluateRiskLogic(readings, highRiskWeather = 0) {
   const oldestPressure = readings[sampleCount - 1].atm_pressure_hpa || currentPressure;
   const pressureDrop = oldestPressure - currentPressure; // Positive = Falling pressure
 
-  // -----------------------------------------------------------------
   // 2. CONTINUOUS FLOOD RISK INDEX (0 - 100)
-  // -----------------------------------------------------------------
   // Base Risk from Current Depth (Scales steeply above 0.3m)
   let floodBase = Math.min(100, (currentDepth / 0.80) * 70); 
 
@@ -89,9 +76,7 @@ function evaluateRiskLogic(readings, highRiskWeather = 0) {
 
   let calculatedFlood = Math.min(99, Math.max(5, floodBase + riseBonus + weatherBonus));
 
-  // -----------------------------------------------------------------
   // 3. CONTINUOUS CLOG RISK INDEX (0 - 100)
-  // -----------------------------------------------------------------
   // Clog condition: High/Elevated water WITHOUT active storm pressure drops
   let clogBase = 0;
   
@@ -114,9 +99,7 @@ function evaluateRiskLogic(readings, highRiskWeather = 0) {
   };
 }
 
-// -------------------------------------------------------------------
 // CONNECTION STATUS
-// -------------------------------------------------------------------
 let lastReadingAt = null;
 
 function refreshStatus() {
@@ -139,9 +122,9 @@ function refreshStatus() {
   if (detail) detail.innerText = `Last reading ${formatTime(lastReadingAt)}`;
 }
 
-// -------------------------------------------------------------------
+
 // CHART.JS FACTORY (Diagonal Labels + Time Formatting)
-// -------------------------------------------------------------------
+
 function createLineChart(canvasId, lineColor, labelName, fillType = 'origin') {
   const ctx = document.getElementById(canvasId).getContext('2d');
   return new Chart(ctx, {
@@ -204,9 +187,8 @@ function applySeries(chart, labels, fullTimes, values) {
   chart.update('none');
 }
 
-// -------------------------------------------------------------------
+
 // FETCH TELEMETRY & UPDATE GRAPHS
-// -------------------------------------------------------------------
 async function updateDashboard() {
   try {
     const [readingsResult] = await Promise.all([
