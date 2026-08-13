@@ -6,9 +6,8 @@
 #include <ArduinoJson.h>
 #include "secrets.h"
 
-// ==========================================
-// 1. NETWORK & SYSTEM CONFIGURATION
-// ==========================================
+
+//NETWORK & SYSTEM CONFIGURATION
 const char* WIFI_SSID = SECRET_SSID;
 const char* WIFI_PASSWORD = SECRET_PASS;
 
@@ -17,35 +16,32 @@ const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = TOPIC;
 
 // Sleep configuration constants
-#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for microseconds to seconds */
+#define uS_TO_S_FACTOR 1000000ULL  //conversion factor
 #define DEFAULT_SLEEP_TIME 15    
 #define HIGH_RISK_SLEEP_TIME 30 
 
 // Dynamic sleep time stored in RTC memory to survive deep sleep cycles
 RTC_DATA_ATTR int sleepDuration = DEFAULT_SLEEP_TIME;
 
-// ==========================================
-// 2. HARDWARE PIN DEFINITIONS
-// ==========================================
-#define I2C_SDA_PIN 21              // SDA for BMP280 & ADS1115 ADC
-#define I2C_SCL_PIN 22              // SCL for BMP280 & ADS1115 ADC
+
+//HARDWARE PIN DEFINITIONS
+#define I2C_SDA_PIN 21
+#define I2C_SCL_PIN 22
 #define LED_BUILTIN_PIN 2           // Status LED pin
 
-// ==========================================
-// 3. OBJECT INITIALIZATION & GLOBAL STATE
-// ==========================================
+
+//OBJECT INITIALIZATION
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
-Adafruit_BMP280 bmp;   // BMP280 Barometric Pressure Sensor
-Adafruit_ADS1115 ads;  // ADS1115 16-Bit ADC
+Adafruit_BMP280 bmp;   
+Adafruit_ADS1115 ads;  
 
 bool bmpAvailable = false;
 bool adsAvailable = false;
 
-// ==========================================
-// 4. MQTT CALLBACK FOR RISK UPDATES
-// ==========================================
+
+//MQTT CALLBACK FOR RISK UPDATES
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   StaticJsonDocument<512> doc;
   DeserializationError error = deserializeJson(doc, payload, length);
@@ -61,19 +57,18 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     int highRisk = doc["high risk"] | 0;
 
     if (highRisk == 1) {
-      sleepDuration = HIGH_RISK_SLEEP_TIME; // 2 minutes
+      sleepDuration = HIGH_RISK_SLEEP_TIME; // 1 minutes
       Serial.println("\n[RISK ALERT] High Risk Weather Forecast Detected!");
       Serial.printf("[RISK ALERT] Updated Sleep Duration to %d seconds (2 mins).\n", sleepDuration);
     } else {
-      sleepDuration = DEFAULT_SLEEP_TIME;   // 15 minutes
+      sleepDuration = DEFAULT_SLEEP_TIME;   // 5 minutes
       Serial.println("\n[RISK ALERT] Low/Normal Risk Weather. Setting Sleep Duration to 15 mins.");
     }
   }
 }
 
-// ==========================================
-// 5. NETWORK & MQTT HELPERS
-// ==========================================
+
+//NETWORK & MQTT HELPERS
 void setupWiFi() {
   Serial.print("Connecting to WiFi: ");
   Serial.println(WIFI_SSID);
@@ -123,13 +118,11 @@ void reconnectMQTT() {
   }
 }
 
-// ==========================================
-// 6. SENSOR INITIALIZATION & SAMPLING
-// ==========================================
+
+//SENSOR INITIALIZATION & SAMPLING
 void setupSensors() {
   pinMode(LED_BUILTIN_PIN, OUTPUT);
 
-  // Initialize I2C bus explicitly
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   delay(100); // Give I2C lines time to settle on wake
 
@@ -146,7 +139,7 @@ void setupSensors() {
   }
 
   // Retry loop for ADS1115
-  ads.setGain(GAIN_ONE);  // +/- 4.096V range
+  ads.setGain(GAIN_ONE);
   for (int i = 0; i < 3; i++) {
     if (ads.begin(0x48)) {
       adsAvailable = true;
@@ -165,13 +158,13 @@ void readAndPublishSensors() {
   float transducerVolts = 0.0;
   float depth = 0.0f;
 
-  // --- Step A: Read BMP280 Atmospheric Data ---
+  //Read BMP280
   if (bmpAvailable) {
     ambientTempC = bmp.readTemperature();
     atmPressureHPa = bmp.readPressure() / 100.0F;
   }
 
-  // --- Step B: Read ADS1115 with 10-Sample Averaging ---
+  //Read ADS1115, taking SAMPLES amount and averaging to reduce noise disruption
   if (adsAvailable) {
     delay(50); // Let power rail settle
 
@@ -196,7 +189,7 @@ void readAndPublishSensors() {
     depth = 0.0f;
   }
 
-  // --- Step C: Build & Publish JSON ---
+  //Build & Publish JSON file on topic
   StaticJsonDocument<256> doc;
   doc["device_id"] = "ESP32-FloodGate";
   doc["water_depth"] = round(depth * 1000.0f) / 1000.0f;
@@ -215,9 +208,7 @@ void readAndPublishSensors() {
   }
 }
 
-// ==========================================
-// 7. MAIN SETUP & SLEEP LOOP
-// ==========================================
+//MAIN SETUP & SLEEP LOOP
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -241,10 +232,10 @@ void setup() {
     }
   }
 
-  // 1. Take sensor readings and publish telemetry
+  //Take sensor readings and publish telemetry
   readAndPublishSensors();
 
-  // 2. Enter Deep Sleep with dynamic duration
+  //Enter Deep Sleep with dynamic duration
   Serial.printf("[Sleep] Entering deep sleep for %d seconds...\n\n", sleepDuration);
   Serial.flush();
 
@@ -253,5 +244,5 @@ void setup() {
 }
 
 void loop() {
-  // Empty - Code executes once in setup() then enters deep sleep
+  //Deep sleep uses no continuous loop
 }
