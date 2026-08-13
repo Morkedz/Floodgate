@@ -1,0 +1,18 @@
+# FloodGate Edge Brain — LOCKED toolchain (validated end-to-end, see DESIGN.md §6)
+#
+# cactus-needle 2.0.3 silently changed the LoRA target groups (10 -> 5) and
+# the quantization scheme; every artifact in this repo is built with 2.0.2
+# plus the pinned 2.0.0 engine dylib (pin_engine.py). Do not "upgrade".
+#
+#   pip install -r requirements-locked.txt
+#   python pin_engine.py
+
+cactus-needle==2.0.2
+jax==0.11.0
+jaxlib==0.11.0
+flax==0.12.8
+optax==0.2.8
+numpy==2.5.2
+flask==3.1.3
+requests==2.34.2
+paho-mqtt==2.1.0
