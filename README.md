@@ -251,3 +251,29 @@ Open any browser on a device connected to the same Wi-Fi network and navigate to
 mDNS URL: http://floodgate.local:8080
 
 Direct IP URL: http://<PI_IP_ADDRESS>:8080
+---
+
+## Edge AI Decision Layer (`floodgate-edge-ai/`)
+
+FloodGate's Pi gateway also runs an **on-device AI decision layer** (the
+"edge brain"): a 14 MB / 45M-parameter **Needle 2** tool-calling LLM plus a
+deterministic rule engine that decide, every cycle, what alert to raise. The
+rule engine keeps final authority; the AI is compared against it live and
+ambiguous / low-confidence / faulty-sensor cases escalate to a cloud model.
+
+* It consumes the **exact MQTT payload the firmware publishes** (`device_id`,
+  `water_depth` in meters, `atm_pressure_hpa`, `ambient_temp_c`, `status`) on
+  the same topic — no firmware changes needed (`--mqtt` mode).
+* Status API on **`:8090`** (`FG_HTTP_PORT`), so it coexists with the web
+  dashboard on `:8080`. Runs as `floodgate-brain.service` (systemd).
+* The LoRA model is trained on a Mac (`./setup_mac.sh`) and deployed to a
+  Raspberry Pi **4 or 5** (64-bit OS) with `deploy_pi.sh`.
+* **Docs:** `document/DESIGN.md` (system design) and
+  `document/TUTORIAL.md` (learning walkthrough).
+
+```bash
+cd floodgate-edge-ai
+pip install -r requirements-pi.txt && python pin_engine.py
+NEEDLE_WEIGHTS=floodgate.cact python edge_brain.py --mqtt   # live
+#   status: http://<pi-ip>:8090/status
+```

@@ -1,0 +1,39 @@
+# FloodGate Edge Brain systemd unit (Raspberry Pi 4 / 5)
+#
+# Placeholders __USER__ / __HOME__ / __DIR__ are filled in by deploy_pi.sh.
+# Runs edge_brain.py with:
+#   - NEEDLE_WEIGHTS  -> the fine-tuned quantized model (floodgate.cact)
+#   - FG_MQTT=1       -> subscribe to the main project's MQTT topic so the
+#                        existing floodgate_firmware.ino feeds the brain as-is
+#   - Flask API       -> :8090/status and :8090/health (bound 0.0.0.0; the
+#                        main web dashboard keeps :8080)
+#
+# Coexists with the main project's services (floodgate-bridge.service,
+# floodgate-web.service) on the same Pi.
+#
+# Optional extras (uncomment + edit as needed):
+#   Environment=SUPABASE_URL=https://YOURPROJECT.supabase.co
+#   Environment=SUPABASE_ANON_KEY=...
+#   Environment=ANTHROPIC_API_KEY=...        # enables cloud escalation tier
+#   Environment=FG_MQTT_TOPIC=umd/cpse/floodgate/telemetry
+#   Environment=FG_MQTT_BROKER=localhost     # if you run a local mosquitto
+#   Environment=FG_DECISION_PERIOD=10
+#   Environment=FG_STALE_AFTER_S=900
+
+[Unit]
+Description=FloodGate Edge Brain (Needle 2 local AI decision layer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+Environment=NEEDLE_WEIGHTS=__DIR__/floodgate.cact
+Environment=FG_MQTT=1
+ExecStart=__DIR__/fg/bin/python __DIR__/edge_brain.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

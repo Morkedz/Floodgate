@@ -1,0 +1,14 @@
+# FloodGate Edge Brain — Raspberry Pi (4/5) inference-only dependencies.
+#
+# The edge brain runs inference through the Needle 2 engine (C++), so the
+# Raspberry Pi does NOT need jax/flax/optax — those are Mac-side training
+# deps only (see requirements-locked.txt). Python 3.10+ (Raspberry Pi OS
+# Bookworm ships 3.11 — 64-bit OS required for the aarch64 engine).
+#
+#   pip install -r requirements-pi.txt
+#   python pin_engine.py
+
+cactus-needle==2.0.2
+flask==3.1.3
+requests==2.34.2
+paho-mqtt==2.1.0

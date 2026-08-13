@@ -1,0 +1,15 @@
+# FloodGate Edge Brain — generated artifacts & local env (regenerable)
+.venv/
+checkpoints/
+__pycache__/
+*.pyc
+
+# Training/build outputs (reproducible via ./setup_mac.sh train)
+finetune_data.jsonl
+*.pkl
+*.cact
+floodgate_pi_bundle.tar.gz
+
+# Local runtime state
+*.log
+.DS_Store
