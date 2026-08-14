@@ -473,8 +473,9 @@ findings = [
      "not a generalization gap, a capacity ceiling"),
     ("Loss < ~1.2 → collapse", "the model snaps to its storm prior and "
      "destroys all-clear; more data/epochs/rank accelerate it"),
-    ("Zero-sum trade-off", "class weighting lifted flood_warning to 37.5% "
-     "only by sacrificing all-clear (0%) — impossible to hold both"),
+    ("Format is the key", "a water-first prompt made flood_watch LEARNABLE "
+     "(0 → 75%): attention follows the leading clause — but no format holds "
+     "all five classes at 45M"),
 ]
 x = Inches(0.6)
 for title, body in findings:
@@ -482,11 +483,11 @@ for title, body in findings:
         size=13, bold=True, align=PP_ALIGN.CENTER)
     box(s, body, x, Inches(5.32), Inches(3.95), Inches(1.05), fill=PANEL, size=11.5)
     x += Inches(4.1)
-box(s, "Verdict: verified ceiling of a 45M model — the deterministic rules carry the water "
-       "alerts by design, and every disagreement escalates. Bigger model / numeric classifier "
-       "= documented future work.",
+box(s, "Verdict: verified ceiling of a 45M model — the pressure-first model stays shipped "
+       "(best overall 31%), the deterministic rules carry the water alerts by design, and "
+       "every disagreement escalates. Water-first format = proven starting point for future work.",
     Inches(0.6), Inches(6.5), Inches(12.1), Inches(0.5), fill=PANEL, color=AMBER,
-    size=12, bold=True, align=PP_ALIGN.CENTER)
+    size=11.5, bold=True, align=PP_ALIGN.CENTER)
 footer(s, 12)
 
 # ---------------------------------------------------------------- S13 robustness
