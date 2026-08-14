@@ -559,7 +559,36 @@ box(s, "Docs: document/DESIGN.md (system design)  ·  document/TUTORIAL.md (walk
     size=14, bold=True, align=PP_ALIGN.CENTER)
 footer(s, 15)
 
-# ---------------------------------------------------------------- S15 thanks
+# ---------------------------------------------------------------- S16 future work
+s = add_slide(prs, "Next steps", "Future work — built on what we proved",
+              notes="Three directions, each grounded in a verified finding: real data "
+                    "(synthetic agreement is imitation), the water-first format (proven to "
+                    "unlock flood_watch), and a hybrid architecture (computed flags + LLM).")
+future = [
+    ("1 · Real storm data", "retrain on logged field telemetry — the JSONL format "
+     "is ready; today's agreement partly reflects imitation of synthetic rules"),
+    ("2 · Water-first prompt", "PROVEN: flood_watch 0 → 75% when the water clause "
+     "leads — adopt it with a bigger model, or as a per-class specialist"),
+    ("3 · Hybrid decision layer", "code computes threshold flags, the LLM explains, "
+     "verifies and escalates — arithmetic leaves the 45M model; language stays"),
+]
+x = Inches(0.6)
+for title, body in future:
+    box(s, title, x, Inches(1.95), Inches(3.95), Inches(0.6), fill=TEAL,
+        color=DARKTXT, size=14, bold=True, align=PP_ALIGN.CENTER)
+    box(s, body, x, Inches(2.7), Inches(3.95), Inches(2.2), fill=PANEL2, size=13)
+    x += Inches(4.1)
+bullets(s, [
+    (0, "Larger base model — the 45M ceiling is now measured (10 runs, train-fit "
+        "probes, format sweeps), so capacity is a known, documented need, not a guess."),
+    (0, "Class-weighted + contrast training — both levers exist in the trainer "
+        "(--class-weights) and the generator (threshold pairs); ready to apply to real data."),
+    (0, "Ops: AGREE-rate dashboard, Pi 5 headroom (2-3x faster inference), "
+        "MQTT topic renames stay code+docs in sync via fg_core."),
+], Inches(0.6), Inches(5.15), Inches(12.1), Inches(1.6), size=13.5, gap=8)
+footer(s, 16)
+
+# ---------------------------------------------------------------- S17 thanks
 s = prs.slides.add_slide(prs.slide_layouts[6])
 bg = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SW, SH)
 bg.fill.solid(); bg.fill.fore_color.rgb = BG; bg.line.fill.background()
