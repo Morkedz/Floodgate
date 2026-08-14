@@ -11,7 +11,7 @@ genuine edge-cloud collaboration architecture.
 
 It consumes the **exact MQTT payload the ESP32 firmware publishes**
 (`device_id`, `water_depth` in meters, `atm_pressure_hpa`, `ambient_temp_c`,
-`status`) on the main topic (`EXAMPLE_TELEMETRY`) — so the AI
+`status`) on the main topic (`umd/cpse/floodgate/telemetry`) — so the AI
 plugs into the existing firmware, bridge, and dashboard **without changing
 any of them**. `fg_core.py` is the single source of truth for the thresholds,
 payload parsing, feature extraction, rule engine, and the exact LLM prompt
