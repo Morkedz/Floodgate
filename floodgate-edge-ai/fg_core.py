@@ -206,6 +206,14 @@ def rule_engine(f) -> str:
 # ----------------------------------------------------------------------------
 # The LLM prompt — byte-for-byte identical in training data, live runtime and
 # evaluation. Never write this string anywhere else; call build_prompt().
+#
+# FORMAT NOTE (experiment, documented in DESIGN.md §5.1): a water-first
+# variant of this prompt made flood_watch learnable (0% -> 75% held-out),
+# proving the rate/level signals ARE learnable when presented first — but a
+# 45M model cannot hold all five classes simultaneously in either format, and
+# the pressure-first format below gives the best OVERALL agreement (31%) with
+# the calm/storm classes the demo leans on. The shipped model is trained on
+# this exact format, so it must not change without retraining.
 # ----------------------------------------------------------------------------
 NOTE_STATUS = " Note: sensor status {status}."                     # e.g. ADC_ERROR / STALE
 NOTE_WEATHER = " Note: OpenWeather forecast flags high risk."
