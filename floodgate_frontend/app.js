@@ -56,21 +56,34 @@ function evaluateRiskLogic(readings) {
 
   // --- FLOOD RISK ---
   // Baseline static score (scaled so 0.4m gives a strong reading for your demo container)
-  let floodScore = (currentDepth / 0.4) * 50; 
+  let floodScore = (currentDepth / 0.4) * 30; 
 
   // Dynamic surge bonus (triggers during rapid filling)
-  if (depthRateOfRise > 0.01) {
-    floodScore += depthRateOfRise * 2000; 
+  if (depthRateOfRise > 0.002) {
+    floodScore += depthRateOfRise * 750;
+    if(pressureDrop > .05) {
+      floodScore += 20;
+    }
   }
+  if (pressureDrop > 0.5) {
+      floodScore += 30;
+  }
+  if(pressureDrop < -.2) { 
+    floodScore -= 30;
+  }
+
 
   // --- CLOG RISK ---
   let clogScore = 0;
   if (currentDepth > 0.15) {
-    clogScore += (currentDepth / 0.4) * 50;
+    clogScore += (currentDepth / 0.4) * 30;
 
     // Penalty if water is high BUT not rising/falling anymore (standing water)
     if (Math.abs(depthRateOfRise) < 0.005) {
       clogScore += 35; 
+    }
+    if (pressureDrop < 0.5) {
+      clogScore += 20;
     }
   }
 
