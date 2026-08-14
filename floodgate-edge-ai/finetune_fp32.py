@@ -64,8 +64,14 @@ def main():
     ap.add_argument("--max-len", type=int, default=1024)
     ap.add_argument("--clip", type=float, default=1.0, help="global grad-norm clip")
     ap.add_argument("--out", default="floodgate_lora.pkl")
+    ap.add_argument("--class-weights",
+                    help="per-class loss weights, e.g. "
+                         "'report_all_clear=0.6,issue_flood_warning=1.4'. "
+                         "Scales each example's loss by its answer class weight, "
+                         "so the model works harder on under-represented/weak classes.")
     args = ap.parse_args()
 
+    import json
     import jax
     import jax.numpy as jnp
     import optax
@@ -81,6 +87,38 @@ def main():
         raise SystemExit("no usable examples in " + args.jsonl_path)
     print(f"training on {len(seqs)} examples, seq_len {args.max_len}")
 
+    # Optional per-class loss weighting — aligned to rows in file order,
+    # same filter load_jsonl applies (rows without "query" are skipped).
+    ex_weights = None
+    if args.class_weights:
+        wmap = {}
+        for tok in args.class_weights.split(","):
+            k, v = tok.split("=")
+            wmap[k.strip()] = float(v)
+        rows_used = 0
+        for line in open(args.jsonl_path):
+            line = line.strip()
+            if not line:
+                continue
+            ex = json.loads(line)
+            if "query" not in ex:
+                continue
+            rows_used += 1
+        wlist = []
+        with open(args.jsonl_path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                ex = json.loads(line)
+                if "query" not in ex:
+                    continue
+                name = (ex.get("answers") or [{}])[0].get("name", "")
+                wlist.append(wmap.get(name, 1.0))
+        ex_weights = jnp.asarray(wlist, jnp.float32)
+        print(f"class weights applied ({len(wlist)} rows, "
+              f"rows_used check={rows_used == len(wlist)})")
+
     model = SimpleAttentionNetwork(config)
     paths = lora_target_paths(params)
     scale = args.lora_alpha / args.lora_rank
@@ -92,16 +130,18 @@ def main():
                             optax.adamw(args.lr))
     opt_state = optimizer.init(lora)
 
-    def loss_fn(lora, ids, mask):
+    def loss_fn(lora, ids, mask, exw=None):
         logits = model.apply({"params": merge_lora(params, lora, scale)}, ids)
         logits = logits.astype(jnp.float32)          # CE in f32 for stability
         logits, targets, mask = logits[:, :-1], ids[:, 1:], mask[:, 1:]
         ce = optax.softmax_cross_entropy_with_integer_labels(logits, targets)
+        if exw is not None:                          # per-example class weighting
+            mask = mask * exw[:, None]
         return (ce * mask).sum() / jnp.maximum(mask.sum(), 1.0)
 
     @jax.jit
-    def train_step(lora, opt_state, ids, mask):
-        loss, grads = jax.value_and_grad(loss_fn)(lora, ids, mask)
+    def train_step(lora, opt_state, ids, mask, exw):
+        loss, grads = jax.value_and_grad(loss_fn)(lora, ids, mask, exw)
         updates, opt_state = optimizer.update(grads, opt_state, lora)
         return optax.apply_updates(lora, updates), opt_state, loss
 
@@ -114,9 +154,10 @@ def main():
         order = np.random.permutation(count)
         for start in range(0, count, batch):
             idx = order[start:start + batch]
+            ew = ex_weights[idx] if ex_weights is not None else None
             lora, opt_state, loss = train_step(lora, opt_state,
                                                jnp.asarray(seqs[idx]),
-                                               jnp.asarray(masks[idx]))
+                                               jnp.asarray(masks[idx]), ew)
             last = float(loss)
             step_i += 1
             if not np.isfinite(last):

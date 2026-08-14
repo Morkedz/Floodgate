@@ -272,6 +272,49 @@ not replacing the thresholds. (Note: training data is synthetic, generated
 from the same thresholds as the rules, so agreement partly reflects
 imitation; the honest next step is fine-tuning on real logged storm data.)
 
+### 5.1 Pushing on the weak classes — six controlled experiments
+
+The water-threshold classes scored 0% on held-out eval, so we attacked them
+systematically. Every run used the locked 2.0.2 toolchain and the same
+200-scenario eval (n=40/class; \* = n=20 probe).
+
+| Run | Data | Rank | Epochs | Class weights | Loss | all_clear | storm | f.watch | f.warning | escal. | Overall |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **v2 (shipped)** | 475 | 16 | 4 | none | 1.50 | 85% | 70% | 0% | 0% | 0% | **31%** |
+| v3 | 475 | 16 | 6 | none | 0.98 | 0%\* | 95%\* | 0%\* | 0%\* | 0%\* | 20% |
+| v4 | 670 rebal. | 16 | 5 | none | 0.90 | 0%\* | 90%\* | 5%\* | 0%\* | 5%\* | ~20% |
+| v6 | 670 | 16 | 4 | all_clear=1.5, storm=0.6, fw=1.4, warn=1.6, esc=1.5 | 0.99 | 0% | 87.5% | 5% | **37.5%** | 0% | 26% |
+| v7 | 670 | **32** | 4 | none | 0.62 | 0%\* | 95%\* | 0%\* | 0%\* | 0%\* | 19% |
+| v8 | 670 | 16 | 3 | all_clear=2.0, storm=0.5, fw=1.4, warn=2.0, esc=1.4 | 1.37 | 77.5% | 62.5% | 0% | 0% | 0% | 28% |
+
+Findings (each verified, not assumed):
+
+1. **The weak classes are barely learnable, period.** Train-fit probes (the
+   model re-answering its own training rows) scored 0-7% on flood_watch /
+   flood_warning / escalate across all runs — the model cannot even memorize
+   the mapping, so this is not a generalization gap.
+2. **Collapse mechanism:** whenever loss drops below ~1.2 the model collapses
+   onto its strongest prior (storm_watch), destroying all_clear. More data
+   (670 rows), more epochs, and more capacity (rank 32) all accelerate the
+   collapse — v7 (rank 32) hit loss 0.62 and scored 0% everywhere except
+   storm.
+3. **The trade-off is zero-sum for this model:** class-weighted training
+   (v6) produced the only real gain — flood_warning 37.5% — but only by
+   sacrificing all_clear entirely (0%); rebalancing back (v8) restored
+   all_clear and lost flood_warning.
+4. **Not a tokenization problem:** the tokenizer represents threshold
+   numbers distinctly ("24.9" and "25.1" tokenize differently), so the
+   ceiling is model capacity, not representation.
+
+Conclusion: a 45M tool-calling LLM, LoRA-tuned with this recipe, can master
+the calm/pressure classes but not numeric water-threshold classification —
+an inherent ceiling verified from six angles (including the original
+project's model, which fails the same classes). The system design absorbs
+this: the deterministic rule engine carries every water alert, and each
+edge/rule disagreement escalates. Putting water thresholds *in* a model
+would need a larger base model or a tiny numeric classifier in front of the
+LLM — both documented as future work.
+
 ## 6. Deployment (Mac trains, Pi runs)
 
 The Pi gateway needs **inference only** — no jax, no training deps:

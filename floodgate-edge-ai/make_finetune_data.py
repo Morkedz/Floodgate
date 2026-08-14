@@ -20,15 +20,16 @@ exceptions are the "adversarial" escalate rows — frozen/conflicting/spiking
 readings that fool the rules — where the model is trained to escalate even
 though rule_engine says otherwise. Those are flagged `"adversarial": true`.)
 
-Dataset (~475 examples):
+Dataset (~640 examples — rebalanced toward the water/fault classes the 45M
+model struggles with, plus explicit threshold-contrast pairs):
   120  report_all_clear        normal conditions
    90  issue_storm_watch       pressure dropping >= 2 hPa/hr
    20  issue_storm_watch       OpenWeather "high risk" broadcast (weather-driven)
-   90  issue_flood_watch       water elevated / rising fast
-   70  issue_flood_warning     water >= critical
+  150  issue_flood_watch       water elevated / rising fast  (75 + 75)
+  120  issue_flood_warning     water >= critical
+   70  escalate_to_cloud       sensor status ADC_ERROR / STALE (hardware faults)
    40  escalate_to_cloud       adversarial: frozen / conflicting / spiking sensors
-   30  escalate_to_cloud       sensor status ADC_ERROR / STALE (hardware faults)
-   15  near-threshold          boundary cases, labeled by rule_engine itself
+   36  threshold-contrast      pairs straddling each threshold + precedence cases
 
 Usage:
   python3 make_finetune_data.py                 # writes finetune_data.jsonl
@@ -155,8 +156,9 @@ for _ in range(20):
         "OpenWeather high-risk forecast; storm likely approaching.",
         {"pressure_trend_hpa_per_hr": f["pressure_trend_hpa_per_hr"]}))
 
-# 4) Flood watch — 90 (two flavors: level-based, rise-based)
-for _ in range(90):
+# 4) Flood watch — 150 (75 level-based, 75 rise-based — REBALANCED: the weak
+#    water classes get 1.5-1.7x the rows so the model sees them more)
+for _ in range(150):
     t = r(15, 32)
     if random.random() < 0.5:
         f = feats(p=r(995, 1020), trend=r(-3.0, 0.5, 2), t=t,
@@ -174,8 +176,8 @@ for _ in range(90):
         {"water_level_cm": f["water_level_cm"],
          "water_rise_cm_per_min": f["water_rise_cm_per_min"]}))
 
-# 5) Flood warning — 70
-for _ in range(70):
+# 5) Flood warning — 120 (REBALANCED)
+for _ in range(120):
     f = feats(p=r(990, 1015), trend=r(-5.0, 0.5, 2), t=r(15, 32),
               w=r(WATER_CRIT_CM, WATER_CRIT_CM + 20), rise=r(0.2, 3.0, 2))
     assert rule_engine(f) == "issue_flood_warning"
@@ -212,10 +214,10 @@ for _ in range(40):
                     "Escalate for verification.", {"reason": reason},
                     adversarial=True))
 
-# 7) Sensor-status faults — 30 (new in the aligned system: the main firmware
-#    reports status="ADC_ERROR" when the ADS1115/transducer is unreadable;
-#    STALE means the device has gone quiet. Both are hardware-fault escalations.)
-for _ in range(30):
+# 7) Sensor-status faults — 70 (REBALANCED: 2x so the model learns the status
+#    note -> escalate mapping; ADC_ERROR is 2x more likely than STALE, matching
+#    the firmware's dominant failure mode)
+for _ in range(70):
     status = random.choice(["ADC_ERROR"] * 2 + ["STALE"])
     f = feats(p=r(1000, 1018), trend=r(-1.5, 1.5, 2), t=r(15, 32),
               w=r(8, 30), rise=r(-0.2, 0.3, 2), status=status)
@@ -226,24 +228,67 @@ for _ in range(30):
         "Escalate for verification.", {"reason": f"Sensor status {status}; "
                                                   "water data not trustworthy."}))
 
-# 8) Near-threshold boundary cases — 15 (labeled by rule_engine itself, so the
-#    model learns the exact same crisp boundaries the safety net enforces)
-for _ in range(15):
-    kind = random.choice(["water_level", "rise_rate", "pressure_trend"])
-    if kind == "water_level":
-        f = feats(p=r(1005, 1018), trend=r(-1.5, 0.5, 2), t=r(15, 32),
-                  w=r(WATER_WARN_CM - 1.5, WATER_WARN_CM + 1.5), rise=r(0.0, 0.3, 2))
-    elif kind == "rise_rate":
-        f = feats(p=r(1005, 1018), trend=r(-1.5, 0.5, 2), t=r(15, 32),
-                  w=r(10, 22), rise=r(WATER_RISE_WARN - 0.2, WATER_RISE_WARN + 0.2))
-    else:
-        f = feats(p=r(1000, 1015), trend=r(-PRESSURE_DROP_STORM - 0.5,
-                                           -PRESSURE_DROP_STORM + 0.5), t=r(15, 32),
-                  w=r(5, 20), rise=r(0.0, 0.3, 2))
-    dec = rule_engine(f)
-    rows.append(row(f, dec,
-        f"Boundary case near the rule threshold; rule engine says {dec.replace('_', ' ')}.",
-        f"Rule-aligned boundary decision: {dec.replace('_', ' ')}."))
+# 8) Threshold-contrast pairs — 36 (NEW: the most targeted fix for the water
+#    classes. Pairs of near-identical situations that differ only by crossing a
+#    threshold, so the model must map the exact numbers: 24.9 -> all clear,
+#    25.1 -> flood watch; 34.9 -> watch, 35.1 -> warning; rise 0.49 vs 0.51;
+#    trend -1.9 vs -2.1. Plus explicit precedence cases where water AND storm
+#    signals conflict (water wins — it is checked first in rule_engine).)
+def contrast_pair(lo_f, lo_dec, hi_f, hi_dec, lo_why, hi_why):
+    rows.append(row(lo_f, lo_dec, lo_why, f"Threshold boundary: {lo_dec.replace('_', ' ')}."))
+    rows.append(row(hi_f, hi_dec, hi_why, f"Threshold boundary: {hi_dec.replace('_', ' ')}."))
+
+for _ in range(6):      # water watch boundary: 24.x vs 25.x
+    w_lo, w_hi = r(WATER_WARN_CM - 1.0, WATER_WARN_CM - 0.05, 1), r(WATER_WARN_CM + 0.05, WATER_WARN_CM + 1.0, 1)
+    lo = feats(p=r(1008, 1018), trend=r(-1.2, 0.5, 2), t=r(15, 32), w=w_lo, rise=r(0.0, 0.3, 2))
+    hi = feats(p=lo["pressure_hpa"], trend=lo["pressure_trend_hpa_per_hr"], t=lo["temperature_c"], w=w_hi, rise=lo["water_rise_cm_per_min"])
+    contrast_pair(lo, "report_all_clear", hi, "issue_flood_watch",
+        f"Water {lo['water_level_cm']} cm is below the {WATER_WARN_CM} cm watch level.",
+        f"Water {hi['water_level_cm']} cm is at or above the {WATER_WARN_CM} cm watch level.")
+
+for _ in range(6):      # rise-rate boundary: 0.49 vs 0.51
+    rise_lo, rise_hi = r(WATER_RISE_WARN - 0.1, WATER_RISE_WARN - 0.01, 2), r(WATER_RISE_WARN + 0.01, WATER_RISE_WARN + 0.1, 2)
+    lo = feats(p=r(1008, 1018), trend=r(-1.2, 0.5, 2), t=r(15, 32), w=r(12, 22), rise=rise_lo)
+    hi = feats(p=lo["pressure_hpa"], trend=lo["pressure_trend_hpa_per_hr"], t=lo["temperature_c"], w=lo["water_level_cm"], rise=rise_hi)
+    contrast_pair(lo, "report_all_clear", hi, "issue_flood_watch",
+        f"Rise {lo['water_rise_cm_per_min']} cm/min is below the {WATER_RISE_WARN} cm/min watch rate.",
+        f"Rise {hi['water_rise_cm_per_min']} cm/min is at or above the {WATER_RISE_WARN} cm/min watch rate.")
+
+for _ in range(6):      # warning boundary: 34.x vs 35.x
+    w_lo, w_hi = r(WATER_CRIT_CM - 1.0, WATER_CRIT_CM - 0.05, 1), r(WATER_CRIT_CM + 0.05, WATER_CRIT_CM + 1.0, 1)
+    lo = feats(p=r(1005, 1015), trend=r(-1.0, 0.5, 2), t=r(15, 32), w=w_lo, rise=r(0.2, 0.8, 2))
+    hi = feats(p=lo["pressure_hpa"], trend=lo["pressure_trend_hpa_per_hr"], t=lo["temperature_c"], w=w_hi, rise=lo["water_rise_cm_per_min"])
+    contrast_pair(lo, "issue_flood_watch", hi, "issue_flood_warning",
+        f"Water {lo['water_level_cm']} cm is below the {WATER_CRIT_CM} cm critical level.",
+        f"Water {hi['water_level_cm']} cm is at or above the {WATER_CRIT_CM} cm critical level.")
+
+for _ in range(6):      # storm boundary: -1.9 vs -2.1
+    tr_lo, tr_hi = r(-PRESSURE_DROP_STORM + 0.1, -PRESSURE_DROP_STORM + 0.01, 2), r(-PRESSURE_DROP_STORM - 0.01, -PRESSURE_DROP_STORM - 0.1, 2)
+    lo = feats(p=r(1005, 1015), trend=tr_lo, t=r(15, 32), w=r(8, 20), rise=r(0.0, 0.3, 2))
+    hi = feats(p=lo["pressure_hpa"], trend=tr_hi, t=lo["temperature_c"], w=lo["water_level_cm"], rise=lo["water_rise_cm_per_min"])
+    contrast_pair(lo, "report_all_clear", hi, "issue_storm_watch",
+        f"Pressure trend {lo['pressure_trend_hpa_per_hr']} hPa/hr is within the +/-{PRESSURE_DROP_STORM} band.",
+        f"Pressure trend {hi['pressure_trend_hpa_per_hr']} hPa/hr is beyond the -{PRESSURE_DROP_STORM} storm threshold.")
+
+for _ in range(6):      # precedence: water signal beats storm signal
+    f = feats(p=r(995, 1005), trend=r(-6.0, -2.5, 2), t=r(15, 32),
+              w=r(WATER_WARN_CM, WATER_CRIT_CM - 1), rise=r(0.2, 0.8, 2))
+    assert rule_engine(f) == "issue_flood_watch"
+    rows.append(row(f, "issue_flood_watch",
+        f"Water {f['water_level_cm']} cm is in the watch band even though pressure "
+        f"is falling at {f['pressure_trend_hpa_per_hr']} hPa/hr — water is checked "
+        "first, so flood watch wins.",
+        "Water level elevated (watch); flood watch takes precedence over storm watch.",
+        {"water_level_cm": f["water_level_cm"],
+         "water_rise_cm_per_min": f["water_rise_cm_per_min"]}))
+    f2 = feats(p=r(990, 1000), trend=r(-6.0, -2.5, 2), t=r(15, 32),
+               w=r(WATER_CRIT_CM, WATER_CRIT_CM + 10), rise=r(0.5, 2.0, 2))
+    assert rule_engine(f2) == "issue_flood_warning"
+    rows.append(row(f2, "issue_flood_warning",
+        f"Water {f2['water_level_cm']} cm is at or above critical even though "
+        f"pressure is also falling — highest severity wins.",
+        "Water level critical; flood warning takes precedence over storm watch.",
+        {"water_level_cm": f2["water_level_cm"]}))
 
 random.shuffle(rows)
 with open("finetune_data.jsonl", "w") as fh:
