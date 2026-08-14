@@ -444,7 +444,52 @@ bullets(s, [
 ], Inches(0.7), Inches(5.5), Inches(11.9), Inches(1.8), size=13, gap=6)
 footer(s, 11)
 
-# ---------------------------------------------------------------- S12 robustness
+# ---------------------------------------------------------------- S12 finetune push
+s = add_slide(prs, "Fine-tuning", "We pushed hard — six experiments, one honest ceiling",
+              notes="After the 0% water-class result, we attacked it with rebalanced data, "
+                    "class-weighted loss and rank 32. The model can't even memorize the water "
+                    "classes (train-fit 0-7%), and low loss triggers a collapse onto its storm "
+                    "prior. Verdict: a verified 45M-model ceiling, absorbed by the design.")
+exp = [
+    ("v2 (shipped)", "475", "r16", "1.50", "85", "70", "0", "0", "31"),
+    ("v3", "475", "r16", "0.98", "0", "95", "0", "0", "20"),
+    ("v4", "670", "r16", "0.90", "0", "90", "5", "0", "~20"),
+    ("v6", "670", "r16", "0.99", "0", "88", "5", "37.5", "26"),
+    ("v7", "670", "r32", "0.62", "0", "95", "0", "0", "19"),
+    ("v8", "670", "r16", "1.37", "78", "63", "0", "0", "28"),
+]
+tbl = table(s, 7, 9, Inches(0.6), Inches(1.85), Inches(12.1), Inches(2.6),
+            col_widths=[Inches(1.75), Inches(1.0), Inches(1.0), Inches(1.0),
+                        Inches(1.2), Inches(1.2), Inches(1.35), Inches(1.4), Inches(1.2)])
+hdr = ["Run", "Data", "Rank", "Loss", "all_clr", "storm", "f.watch", "f.warning", "overall"]
+for c, h in enumerate(hdr):
+    fill_cell(tbl, 0, c, h, bold=True, size=11)
+for r, row in enumerate(exp, start=1):
+    for c, v in enumerate(row):
+        fill_cell(tbl, r, c, v, bold=(r == 1), size=11,
+                  color=GREEN if (r == 1 and c == 8) else WHITE)
+findings = [
+    ("Can't even memorize it", "train-fit on the water classes: 0–7% — "
+     "not a generalization gap, a capacity ceiling"),
+    ("Loss < ~1.2 → collapse", "the model snaps to its storm prior and "
+     "destroys all-clear; more data/epochs/rank accelerate it"),
+    ("Zero-sum trade-off", "class weighting lifted flood_warning to 37.5% "
+     "only by sacrificing all-clear (0%) — impossible to hold both"),
+]
+x = Inches(0.6)
+for title, body in findings:
+    box(s, title, x, Inches(4.75), Inches(3.95), Inches(0.5), fill=PANEL2,
+        size=13, bold=True, align=PP_ALIGN.CENTER)
+    box(s, body, x, Inches(5.32), Inches(3.95), Inches(1.05), fill=PANEL, size=11.5)
+    x += Inches(4.1)
+box(s, "Verdict: verified ceiling of a 45M model — the deterministic rules carry the water "
+       "alerts by design, and every disagreement escalates. Bigger model / numeric classifier "
+       "= documented future work.",
+    Inches(0.6), Inches(6.5), Inches(12.1), Inches(0.5), fill=PANEL, color=AMBER,
+    size=12, bold=True, align=PP_ALIGN.CENTER)
+footer(s, 12)
+
+# ---------------------------------------------------------------- S13 robustness
 s = add_slide(prs, "Engineering", "Four bugs we found, four fixes",
               notes="Each one is a real engineering lesson, all documented in the tutorial.")
 war = [
@@ -462,7 +507,7 @@ for title, body in war:
     box(s, title, Inches(0.7), y, Inches(3.6), Inches(1.15), fill=PANEL2, size=14, bold=True)
     box(s, body, Inches(4.5), y, Inches(8.1), Inches(1.15), fill=PANEL, size=12.5)
     y += Inches(1.3)
-footer(s, 12)
+footer(s, 13)
 
 # ---------------------------------------------------------------- S13 demo plan
 s = add_slide(prs, "Demo", "Live demo on the separate Pi",
@@ -485,9 +530,9 @@ bullets(s, [
     (0, "Kill the WiFi → everything keeps working. That is the money moment."),
     (0, "Feed a conflicting reading → watch it escalate to the cloud tier."),
 ], Inches(0.6), Inches(4.75), Inches(12.1), Inches(1.9), size=15, gap=8)
-footer(s, 13)
+footer(s, 14)
 
-# ---------------------------------------------------------------- S14 deploy
+# ---------------------------------------------------------------- S15 deploy
 s = add_slide(prs, "Deployment", "Mac trains, Pi runs — one command each",
               notes="Fully reproducible. The bundle is self-contained; deploy_pi.sh checks "
                     "for 64-bit OS, installs the service, evaluates on-device.")
@@ -511,7 +556,7 @@ bullets(s, [
 box(s, "Docs: document/DESIGN.md (system design)  ·  document/TUTORIAL.md (walkthrough)",
     Inches(0.7), Inches(5.6), Inches(11.9), Inches(0.8), fill=PANEL, color=TEAL,
     size=14, bold=True, align=PP_ALIGN.CENTER)
-footer(s, 14)
+footer(s, 15)
 
 # ---------------------------------------------------------------- S15 thanks
 s = prs.slides.add_slide(prs.slide_layouts[6])
